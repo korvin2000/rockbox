@@ -27,7 +27,10 @@ extern "C"
 #include "ivorbiscodec.h"
 
 
-#define CHUNKSIZE 1024
+#define CHUNKSIZE 8192
+#define SEEK_SLACK_SEC 20                 /* acceptable ± window   */
+#define SEEK_SLACK_SAMPLES(rate) ((ogg_int64_t)(SEEK_SLACK_SEC)*(rate))
+
 /* The function prototypes for the callbacks are basically the same as for
  * the stdio functions fread, fseek, fclose, ftell. 
  * The one difference is that the FILE * arguments have been replaced with

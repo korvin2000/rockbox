@@ -28,6 +28,12 @@
 #include "os.h"
 #include "misc.h"
 
+static struct {
+    ogg_int64_t  abs_off;
+    long         used;
+    char         buf[CHUNKSIZE];
+} seekcache = { -1, 0, {0} };
+
 /* A 'chained bitstream' is a Vorbis bitstream that contains more than
    one logical bitstream arranged end to end (the only form of Ogg
    multiplexing allowed in a Vorbis bitstream; grouping [parallel
@@ -65,6 +71,10 @@ static long _get_data(OggVorbis_File *vf){
     char *buffer=ogg_sync_buffer(&vf->oy,CHUNKSIZE);
     long bytes=(vf->callbacks.read_func)(buffer,1,CHUNKSIZE,vf->datasource);
     if(bytes>0)ogg_sync_wrote(&vf->oy,bytes);
+    /* remember last chunk for opportunistic reuse               */
+    seekcache.abs_off = vf->offset;
+    seekcache.used    = bytes;
+    memcpy(seekcache.buf, buffer, bytes);
     return(bytes);
   }else
     return(0);
@@ -76,8 +86,21 @@ static int _seek_helper(OggVorbis_File *vf,ogg_int64_t offset){
     if(!(vf->callbacks.seek_func)||
        (vf->callbacks.seek_func)(vf->datasource, offset, SEEK_SET) == -1)
       return OV_EREAD;
+    /*
     vf->offset=offset;
     ogg_sync_reset(&vf->oy);
+    */
+    vf->offset = offset;
+    ogg_sync_reset(&vf->oy);
+    if(seekcache.abs_off == offset){
+        /* page already in RAM – stitch it back into sync layer */
+        char *p = ogg_sync_buffer(&vf->oy, seekcache.used);
+        memcpy(p, seekcache.buf, seekcache.used);
+        ogg_sync_wrote(&vf->oy, seekcache.used);
+    }else{
+        seekcache.abs_off = -1;
+        //ogg_sync_reset(&vf->oy);
+    }
   }else{
     /* shouldn't happen unless someone writes a broken callback */
     return OV_EFAULT;
@@ -1297,16 +1320,34 @@ int ov_pcm_seek_page(OggVorbis_File *vf,ogg_int64_t pos){
     ogg_page og;
     while(begin<end){
       ogg_int64_t bisect;
-
+      /*
       if(end-begin<CHUNKSIZE){
         bisect=begin;
       }else{
-        /* take a (pretty decent) guess. */
+        // take a (pretty decent) guess. 
         bisect=begin + rescale64(target-begintime,
 				 endtime-begintime,
 				 end-begin) - CHUNKSIZE;
         if(bisect<begin+CHUNKSIZE)
           bisect=begin;
+      }
+      */
+      if(end - begin < CHUNKSIZE*2){
+          /* search window already small – decode forward */
+          bisect = begin;
+      }else{
+          /* interpolation often overshoots badly on VBR;
+             if the guess is too close to either edge, fall back to
+             a pure midpoint to avoid degenerate O(n) scans            */
+          ogg_int64_t guess = begin + rescale64(target - begintime,
+                                                endtime - begintime,
+                                                end - begin);
+          if(guess - begin < CHUNKSIZE ||
+             end   - guess < CHUNKSIZE){
+              bisect = (begin + end) >> 1;        /* binary step */
+          }else{
+              bisect = guess - CHUNKSIZE;
+          }
       }
 
       if(bisect!=vf->offset){
@@ -1341,11 +1382,22 @@ int ov_pcm_seek_page(OggVorbis_File *vf,ogg_int64_t pos){
             begin=vf->offset; /* raw offset of next page */
             begintime=granulepos;
 
-            if(target-begintime>44100)break;
+            //if(target-begintime>44100)break;
+            /* stop seeking once we’re inside the ±20 s window */
+            if (target - begintime <= SEEK_SLACK_SAMPLES(vf->vi[link].rate)) {
+              end = begin; 
+              break;
+              }
             bisect=begin; /* *not* begin + 1 */
           }else{
-            if(bisect<=begin+1)
-              end=begin;  /* found it */
+              /* overshot, but still within tolerance? */
+              if (granulepos - target <= SEEK_SLACK_SAMPLES(vf->vi[link].rate)){
+                  end=begin;          /* treat this page as the target */
+                  best = result;
+                  break;              /* <-- stop bisection here */
+              } else
+              if(bisect<=begin+1)
+                end=begin;  /* found it */
             else{
               if(end==vf->offset){ /* we're pretty close - we'd be stuck in */
                 end=result;
@@ -1355,6 +1407,12 @@ int ov_pcm_seek_page(OggVorbis_File *vf,ogg_int64_t pos){
                 if(result) goto seek_error;
               }else{
                 end=bisect;
+                /*ogg_int64_t slack = SEEK_SLACK_SAMPLES(vf->vi[link].rate);
+                if(granulepos - target <= slack){
+                  begin = end = vf->offset; // close enough        
+                }else{
+                  end = bisect;
+                }*/
                 endtime=granulepos;
                 break;
               }
@@ -1372,8 +1430,9 @@ int ov_pcm_seek_page(OggVorbis_File *vf,ogg_int64_t pos){
 
       /* seek */
       result=_seek_helper(vf,best);
-      vf->pcm_offset=-1;
+      //vf->pcm_offset=-1;
       if(result) goto seek_error;
+      vf->pcm_offset = pos;
       result=_get_next_page(vf,&og,-1);
       if(result<0) goto seek_error;
 
