@@ -25,6 +25,7 @@
 #include "config.h"
 #include "appevents.h"
 #include "menu.h"
+#include "playback.h"
 #include "root_menu.h"
 #include "lang.h"
 #include "settings.h"
@@ -103,11 +104,19 @@ static void rootmenu_start_playback_callback(unsigned short id, void *param)
 #endif
 
 static char current_track_path[MAX_PATH];
+
+void root_menu_remember_current_track(void)
+{
+    struct mp3entry *id3 = audio_current_track();
+    if (id3)
+        strlcpy(current_track_path, id3->path, MAX_PATH);
+}
+
 static void rootmenu_track_changed_callback(unsigned short id, void* param)
 {
     (void)id;
-    struct mp3entry *id3 = ((struct track_event *)param)->id3;
-    strlcpy(current_track_path, id3->path, MAX_PATH);
+    (void)param;
+    root_menu_remember_current_track();
 }
 static int browser(void* param)
 {
@@ -801,9 +810,6 @@ static int root_menu_setup_screens(void)
     add_event(PLAYBACK_EVENT_START_PLAYBACK, rootmenu_start_playback_callback);
 #endif
     add_event(PLAYBACK_EVENT_TRACK_CHANGE, rootmenu_track_changed_callback);
-    /* When resuming playback from bookmarks the initial track change event
-       may not fire, but PLAYBACK_EVENT_CUR_TRACK_READY does, so handle both */
-    add_event(PLAYBACK_EVENT_CUR_TRACK_READY, rootmenu_track_changed_callback);
 #ifdef HAVE_RTC_ALARM
     int alarm_wake_up_screen = 0;
     if ( rtc_check_alarm_started(true) )

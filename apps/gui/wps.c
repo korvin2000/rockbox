@@ -1012,8 +1012,10 @@ long gui_wps_show(void)
             if (button == ACTION_WPS_REC)
                 return GO_TO_RECSCREEN;
 #endif
-            if (global_settings.browse_current)
+            if (global_settings.browse_current) {
+                root_menu_remember_current_track();
                 return GO_TO_PREVIOUS_BROWSER;
+            }
             return GO_TO_PREVIOUS;
         }
 
