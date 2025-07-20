@@ -1612,10 +1612,15 @@ int ov_time_seek(OggVorbis_File *vf,ogg_int64_t milliseconds){
   int link=-1;
   ogg_int64_t pcm_total=0;
   ogg_int64_t time_total=0;
+  ogg_int64_t overall_time=0;
+  ogg_int64_t pcm_limit=0;
 
   if(vf->ready_state<OPENED)return(OV_EINVAL);
   if(!vf->seekable)return(OV_ENOSEEK);
   if(milliseconds<0)return(OV_EINVAL);
+
+  pcm_limit=ov_pcm_total(vf,-1);
+  overall_time=ov_time_total(vf,-1);
 
   /* which bitstream section does this time offset occur in? */
   for(link=0;link<vf->links;link++){
@@ -1625,11 +1630,19 @@ int ov_time_seek(OggVorbis_File *vf,ogg_int64_t milliseconds){
     pcm_total+=vf->pcmlengths[link*2+1];
   }
 
-  if(link==vf->links)return(OV_EINVAL);
+  if(link==vf->links){
+    if(milliseconds==overall_time){
+      /* seek to the very end of the stream */
+      return ov_pcm_seek(vf, pcm_limit);
+    }
+    return(OV_EINVAL);
+  }
 
   /* enough information to convert time offset to pcm offset */
   {
     ogg_int64_t target=pcm_total+(milliseconds-time_total)*vf->vi[link].rate/1000;
+    if(target>pcm_limit)
+      target=pcm_limit;
     return(ov_pcm_seek(vf,target));
   }
 }
