@@ -801,6 +801,9 @@ static int root_menu_setup_screens(void)
     add_event(PLAYBACK_EVENT_START_PLAYBACK, rootmenu_start_playback_callback);
 #endif
     add_event(PLAYBACK_EVENT_TRACK_CHANGE, rootmenu_track_changed_callback);
+    /* When resuming playback from bookmarks the initial track change event
+       may not fire, but PLAYBACK_EVENT_CUR_TRACK_READY does, so handle both */
+    add_event(PLAYBACK_EVENT_CUR_TRACK_READY, rootmenu_track_changed_callback);
 #ifdef HAVE_RTC_ALARM
     int alarm_wake_up_screen = 0;
     if ( rtc_check_alarm_started(true) )
