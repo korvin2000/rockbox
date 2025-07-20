@@ -129,15 +129,17 @@ static int browser(void* param)
     {
         case GO_TO_FILEBROWSER:
             filter = global_settings.dirfilter;
+            if (!strcmp(last_folder, "/") && current_track_path[0])
+                strlcpy(last_folder, current_track_path, sizeof(last_folder));
             if (global_settings.browse_current &&
                     last_screen == GO_TO_WPS &&
                     current_track_path[0])
             {
-                strcpy(folder, current_track_path);
+                strlcpy(folder, current_track_path, sizeof(folder));
             }
             else if (!strcmp(last_folder, "/"))
             {
-                strcpy(folder, global_settings.start_directory);
+                strlcpy(folder, global_settings.start_directory, sizeof(folder));
             }
             else
             {
