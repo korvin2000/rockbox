@@ -86,6 +86,7 @@ static void  say_bookmark(const char* bookmark,
                           int bookmark_id, bool show_playlist_name);
 static bool  play_bookmark(const char* bookmark);
 static bool  generate_bookmark_file_name(const char *in);
+static bool  generate_legacy_bookmark_file_name(const char *in, char *out);
 static bool  parse_bookmark(const char *bookmark, const bool get_filenames, const bool strip_dir);
 static int   buffer_bookmarks(struct bookmark_list* bookmarks, int first_line);
 static const char* get_bookmark_info(int list_index,
