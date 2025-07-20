@@ -1256,6 +1256,15 @@ int ov_raw_seek(OggVorbis_File *vf,ogg_int64_t pos){
 /* rescales the number x from the range of [0,from] to [0,to]
    x is in the range [0,from]
    from, to are in the range [1, 1<<62-1] */
+#if defined(__SIZEOF_INT128__)
+ogg_int64_t rescale64(ogg_int64_t x, ogg_int64_t from, ogg_int64_t to){
+  if(x >= from) return to;
+  if(x <= 0) return 0;
+
+  __int128 prod = (__int128)x * (__int128)to;
+  return (ogg_int64_t)(prod / from);
+}
+#else
 ogg_int64_t rescale64(ogg_int64_t x, ogg_int64_t from, ogg_int64_t to){
   ogg_int64_t frac=0;
   ogg_int64_t ret=0;
@@ -1282,6 +1291,7 @@ ogg_int64_t rescale64(ogg_int64_t x, ogg_int64_t from, ogg_int64_t to){
 
   return ret;
 }
+#endif
 
 /* Page granularity seek (faster than sample granularity because we
    don't do the last bit of decode to find a specific sample).
