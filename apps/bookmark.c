@@ -135,15 +135,6 @@ int bookmark_load_menu(void)
                                        sizeof(global_temp_buffer));
     if (generate_bookmark_file_name(name))
     {
-        if (!file_exists(global_bookmark_file_name))
-        {
-            char legacy[MAX_PATH];
-            if (generate_legacy_bookmark_file_name(name, legacy) &&
-                file_exists(legacy))
-                strlcpy(global_bookmark_file_name, legacy,
-                        sizeof(global_bookmark_file_name));
-        }
-
         ret = select_bookmark(global_bookmark_file_name, false, &bookmark);
         if (bookmark != NULL)
         {
@@ -466,13 +457,7 @@ bool bookmark_autoload(const char* file)
     }
 
     if(!file_exists(global_bookmark_file_name))
-    {
-        char legacy[MAX_PATH];
-        if (!generate_legacy_bookmark_file_name(file, legacy) ||
-            !file_exists(legacy))
-            return false;
-        strlcpy(global_bookmark_file_name, legacy, sizeof(global_bookmark_file_name));
-    }
+        return false;
 
     if(global_settings.autoloadbookmark == BOOKMARK_YES)
     {
@@ -1120,101 +1105,40 @@ static bool parse_bookmark(const char *bookmark, const bool parse_filenames, con
 /* could be placed.                                                        */
 /* Returns true if the file name is generated, false if it was too long    */
 /* ----------------------------------------------------------------------- */
-/* Old bookmark path logic used prior to storing bookmarks inside the
- * directory of the referenced audio files. This helper is used as a
- * fallback when loading legacy bookmark files. */
-static bool generate_legacy_bookmark_file_name(const char *in, char *out)
+static bool generate_bookmark_file_name(const char *in)
 {
+    /* if this is a root dir MP3, rename the bookmark file root_dir.bmark */
+    /* otherwise, name it based on the in variable */
     if (!strcmp("/", in))
-        strcpy(out, "/root_dir.bmark");
+        strcpy(global_bookmark_file_name, "/root_dir.bmark");
     else
     {
 #ifdef HAVE_MULTIVOLUME
+        /* The "root" of an extra volume need special handling too. */
         const char *filename;
         path_strip_volume(in, &filename, true);
         bool volume_root = *filename == '\0';
 #endif
-        size_t len = strlcpy(out, in, MAX_PATH);
-        if (len >= MAX_PATH)
+        size_t len = strlcpy(global_bookmark_file_name, in, MAX_PATH);
+        if(len >= MAX_PATH)
             return false;
 
-        if (out[len-1] == '/')
-        {
-            out[len-1] = '\0';
+        if(global_bookmark_file_name[len-1] == '/') {
+            global_bookmark_file_name[len-1] = '\0';
             len--;
         }
 
 #ifdef HAVE_MULTIVOLUME
         if (volume_root)
-            len = strlcat(out, "/volume_dir.bmark", MAX_PATH);
+            len = strlcat(global_bookmark_file_name, "/volume_dir.bmark", MAX_PATH);
         else
 #endif
-            len = strlcat(out, ".bmark", MAX_PATH);
+            len = strlcat(global_bookmark_file_name, ".bmark", MAX_PATH);
 
-        if (len >= MAX_PATH)
+        if(len >= MAX_PATH)
             return false;
     }
-    return true;
-}
 
-static bool generate_bookmark_file_name(const char *in)
-{
-    /* New logic: store bookmarks inside the referenced directory. */
-    if (!strcmp("/", in))
-    {
-        strcpy(global_bookmark_file_name, "/root_dir.bmark");
-        return true;
-    }
-
-#ifdef HAVE_MULTIVOLUME
-    const char *filename;
-    path_strip_volume(in, &filename, true);
-    bool volume_root = *filename == '\0';
-#else
-    bool volume_root = false;
-#endif
-
-    char tmp[MAX_PATH];
-    size_t len = strlcpy(tmp, in, sizeof(tmp));
-    if (len >= sizeof(tmp))
-        return false;
-
-    bool is_dir = false;
-    if (tmp[len-1] == '/')
-    {
-        tmp[len-1] = '\0';
-        len--;
-        is_dir = true;
-    }
-
-#ifdef HAVE_MULTIVOLUME
-    if (volume_root)
-        is_dir = true;
-#endif
-
-    if (is_dir && len > 0)
-    {
-        const char *base = strrchr(tmp, '/');
-        base = base ? base + 1 : tmp;
-        if (snprintf(global_bookmark_file_name, sizeof(global_bookmark_file_name),
-                     "%s/%s.bmark", tmp, base) >= (int)sizeof(global_bookmark_file_name))
-            return false;
-    }
-    else
-    {
-#ifdef HAVE_MULTIVOLUME
-        if (volume_root)
-            len = strlcpy(global_bookmark_file_name, tmp, sizeof(global_bookmark_file_name)),
-                  strlcat(global_bookmark_file_name, "/volume_dir.bmark", sizeof(global_bookmark_file_name));
-        else
-#endif
-        {
-            len = strlcpy(global_bookmark_file_name, tmp, sizeof(global_bookmark_file_name));
-            if (len >= sizeof(global_bookmark_file_name) ||
-                strlcat(global_bookmark_file_name, ".bmark", sizeof(global_bookmark_file_name)) >= sizeof(global_bookmark_file_name))
-                return false;
-        }
-    }
     return true;
 }
 
@@ -1231,12 +1155,6 @@ bool bookmark_exists(void)
     if (generate_bookmark_file_name(name))
     {
         exist = file_exists(global_bookmark_file_name);
-        if (!exist)
-        {
-            char legacy[MAX_PATH];
-            if (generate_legacy_bookmark_file_name(name, legacy))
-                exist = file_exists(legacy);
-        }
     }
     return exist;
 }
