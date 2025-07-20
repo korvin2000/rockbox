@@ -1005,6 +1005,9 @@ int ov_clear(OggVorbis_File *vf){
     if(vf->serialnos)_ogg_free(vf->serialnos);
     if(vf->offsets)_ogg_free(vf->offsets);
     ogg_sync_clear(&vf->oy);
+    /* reset seek cache so leftover data doesn't affect the next file */
+    seekcache.abs_off = -1;
+    seekcache.used    = 0;
     if(vf->datasource && vf->callbacks.close_func)
       (vf->callbacks.close_func)(vf->datasource);
     memset(vf,0,sizeof(*vf));
