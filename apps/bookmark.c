@@ -135,6 +135,13 @@ int bookmark_load_menu(void)
                                        sizeof(global_temp_buffer));
     if (generate_bookmark_file_name(name))
     {
+        if (!file_exists(global_bookmark_file_name))
+        {
+            char oldname[MAX_PATH];
+            if (generate_legacy_bookmark_file_name(name, oldname, sizeof(oldname)) &&
+                file_exists(oldname))
+                strlcpy(global_bookmark_file_name, oldname, sizeof(global_bookmark_file_name));
+        }
         ret = select_bookmark(global_bookmark_file_name, false, &bookmark);
         if (bookmark != NULL)
         {
@@ -457,7 +464,13 @@ bool bookmark_autoload(const char* file)
     }
 
     if(!file_exists(global_bookmark_file_name))
-        return false;
+    {
+        char oldname[MAX_PATH];
+        if(!generate_legacy_bookmark_file_name(file, oldname, sizeof(oldname)) ||
+           !file_exists(oldname))
+            return false;
+        strlcpy(global_bookmark_file_name, oldname, sizeof(global_bookmark_file_name));
+    }
 
     if(global_settings.autoloadbookmark == BOOKMARK_YES)
     {
@@ -1110,7 +1123,9 @@ static bool generate_bookmark_file_name(const char *in)
     /* if this is a root dir MP3, rename the bookmark file root_dir.bmark */
     /* otherwise, name it based on the in variable */
     if (!strcmp("/", in))
+    {
         strcpy(global_bookmark_file_name, "/root_dir.bmark");
+    }
     else
     {
 #ifdef HAVE_MULTIVOLUME
@@ -1123,22 +1138,84 @@ static bool generate_bookmark_file_name(const char *in)
         if(len >= MAX_PATH)
             return false;
 
-        if(global_bookmark_file_name[len-1] == '/') {
+        if(global_bookmark_file_name[len-1] == '/')
+        {
+            /* Store bookmark inside the directory itself */
             global_bookmark_file_name[len-1] = '\0';
-            len--;
-        }
+            char *base = strrchr(global_bookmark_file_name, '/');
+            if(base)
+                base++;
+            else
+                base = global_bookmark_file_name;
 
+            if(strlcat(global_bookmark_file_name, "/", MAX_PATH) >= MAX_PATH)
+                return false;
 #ifdef HAVE_MULTIVOLUME
-        if (volume_root)
-            len = strlcat(global_bookmark_file_name, "/volume_dir.bmark", MAX_PATH);
-        else
+            if (volume_root)
+            {
+                if(strlcat(global_bookmark_file_name, "volume_dir", MAX_PATH) >= MAX_PATH)
+                    return false;
+            }
+            else
 #endif
-            len = strlcat(global_bookmark_file_name, ".bmark", MAX_PATH);
-
-        if(len >= MAX_PATH)
-            return false;
+            {
+                if(strlcat(global_bookmark_file_name, base, MAX_PATH) >= MAX_PATH)
+                    return false;
+            }
+            if(strlcat(global_bookmark_file_name, ".bmark", MAX_PATH) >= MAX_PATH)
+                return false;
+        }
+        else
+        {
+#ifdef HAVE_MULTIVOLUME
+            if (volume_root)
+            {
+                if(strlcat(global_bookmark_file_name, "/volume_dir.bmark", MAX_PATH) >= MAX_PATH)
+                    return false;
+            }
+            else
+#endif
+            {
+                if(strlcat(global_bookmark_file_name, ".bmark", MAX_PATH) >= MAX_PATH)
+                    return false;
+            }
+        }
     }
 
+    return true;
+}
+
+/* old style bookmark location for compatibility */
+static bool generate_legacy_bookmark_file_name(const char *in, char *out, size_t size)
+{
+    if (!strcmp("/", in))
+    {
+        return strlcpy(out, "/root_dir.bmark", size) < size;
+    }
+#ifdef HAVE_MULTIVOLUME
+    const char *filename;
+    path_strip_volume(in, &filename, true);
+    bool volume_root = *filename == '\0';
+#endif
+    size_t len = strlcpy(out, in, size);
+    if(len >= size)
+        return false;
+
+    if(out[len-1] == '/')
+    {
+        out[len-1] = '\0';
+        len--;
+    }
+
+#ifdef HAVE_MULTIVOLUME
+    if (volume_root)
+        len = strlcat(out, "/volume_dir.bmark", size);
+    else
+#endif
+        len = strlcat(out, ".bmark", size);
+
+    if(len >= size)
+        return false;
     return true;
 }
 
@@ -1148,13 +1225,25 @@ static bool generate_bookmark_file_name(const char *in)
 /* ----------------------------------------------------------------------- */
 bool bookmark_exists(void)
 {
-    bool exist=false;
+    bool exist = false;
 
     char* name = playlist_get_name(NULL, global_temp_buffer,
                                    sizeof(global_temp_buffer));
     if (generate_bookmark_file_name(name))
     {
         exist = file_exists(global_bookmark_file_name);
+        if (!exist)
+        {
+            char oldname[MAX_PATH];
+            if (generate_legacy_bookmark_file_name(name, oldname, sizeof(oldname)))
+            {
+                if (file_exists(oldname))
+                {
+                    strlcpy(global_bookmark_file_name, oldname, sizeof(global_bookmark_file_name));
+                    exist = true;
+                }
+            }
+        }
     }
     return exist;
 }
