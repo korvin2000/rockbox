@@ -142,11 +142,14 @@ void dct32(mad_fixed_t const in[32], unsigned int slot,
 
 /*
  * NAME:        dct32()
- * DESCRIPTION: perform fast in[32]->out[32] DCT
+ * DESCRIPTION: perform fast in[32]->out[32] DCT.
+ * The pointers are marked with the C99 'restrict' qualifier so the
+ * compiler can safely assume that 'in', 'lo' and 'hi' do not alias,
+ * enabling improved optimization.
  */
 static
-void dct32(mad_fixed_t const in[32], unsigned int slot,
-           mad_fixed_t lo[16][8], mad_fixed_t hi[16][8])
+void dct32(const mad_fixed_t *restrict in, unsigned int slot,
+           mad_fixed_t (*restrict lo)[8], mad_fixed_t (*restrict hi)[8])
 {
   mad_fixed_t t0,   t1,   t2,   t3,   t4,   t5,   t6,   t7;
   mad_fixed_t t8,   t9,   t10,  t11,  t12,  t13,  t14,  t15;
