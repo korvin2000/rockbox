@@ -61,8 +61,14 @@ void mad_synth_mute(struct mad_synth *synth)
 #if 0 /* dct32 asm implementation is slower on current arm systems */
 /* #ifdef FPM_ARM */
 
-void dct32(mad_fixed_t const in[32], unsigned int slot,
-           mad_fixed_t lo[16][8], mad_fixed_t hi[16][8]);
+/*
+ * The assembler implementation proved slower on modern ARM cores.  The C
+ * version benefits from modern compilers, especially when the parameters are
+ * marked restrict to aid optimisation.  Keep using the C variant and hint the
+ * compiler about the lack of aliasing.
+ */
+void dct32(const mad_fixed_t * restrict in, unsigned int slot,
+           mad_fixed_t (* restrict lo)[8], mad_fixed_t (* restrict hi)[8]);
 
 #else
 
@@ -144,9 +150,9 @@ void dct32(mad_fixed_t const in[32], unsigned int slot,
  * NAME:        dct32()
  * DESCRIPTION: perform fast in[32]->out[32] DCT
  */
-static
-void dct32(mad_fixed_t const in[32], unsigned int slot,
-           mad_fixed_t lo[16][8], mad_fixed_t hi[16][8])
+static inline
+void dct32(const mad_fixed_t * restrict in, unsigned int slot,
+           mad_fixed_t (* restrict lo)[8], mad_fixed_t (* restrict hi)[8])
 {
   mad_fixed_t t0,   t1,   t2,   t3,   t4,   t5,   t6,   t7;
   mad_fixed_t t8,   t9,   t10,  t11,  t12,  t13,  t14,  t15;
